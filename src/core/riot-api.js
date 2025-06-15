@@ -56,4 +56,33 @@ async function getRankedData(gameName, tagLine) {
   }
 }
 
-module.exports = { getRankedData };
+async function getMatchIds(puuid) {
+  try {
+    const twentyFourHoursAgo = Math.floor(Date.now() / 1000) - 86400;
+    const options = {
+      startTime: twentyFourHoursAgo,
+      queue: 420, // 420 is the ID for Ranked Solo/Duo
+      count: 100, // Get up to 100 matches
+    };
+    const matchList = await lolApi.Match.list(puuid, "asia", options);
+    return { success: true, matches: matchList.response };
+  } catch (error) {
+    console.error(`API Error getting match list for ${puuid}:`, error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function getMatchDetails(matchId) {
+  try {
+    const matchDetails = await lolApi.Match.get(matchId, "asia");
+    return { success: true, details: matchDetails.response };
+  } catch (error) {
+    console.error(
+      `API Error getting details for match ${matchId}:`,
+      error.message
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+module.exports = { getRankedData, getMatchIds, getMatchDetails };

@@ -1,6 +1,11 @@
+// Replace the entire function in src/tasks/dailyLpCheck.js
 const { EmbedBuilder } = require("discord.js");
 const db = require("../core/database");
-const { getRankedData } = require("../core/riot-api");
+const {
+  getRankedData,
+  getMatchIds,
+  getMatchDetails,
+} = require("../core/riot-api");
 const config = require("../config");
 
 module.exports = async (client) => {
@@ -20,21 +25,54 @@ module.exports = async (client) => {
       if (!currentData.success) continue;
 
       const lpChange = currentData.lp - player.lastLP;
-      if (lpChange === 0 && currentData.tier === player.lastTier) continue;
+      const rankChanged =
+        currentData.tier !== player.lastTier ||
+        currentData.rank !== player.lastRank;
+
+      // --- NEW: Calculate Win/Loss Record ---
+      let wins = 0;
+      let losses = 0;
+      const matchHistory = await getMatchIds(currentData.puuid);
+      if (matchHistory.success && matchHistory.matches.length > 0) {
+        for (const matchId of matchHistory.matches) {
+          const matchResult = await getMatchDetails(matchId);
+          if (matchResult.success) {
+            const participant = matchResult.details.info.participants.find(
+              (p) => p.puuid === currentData.puuid
+            );
+            if (participant) {
+              if (participant.win) wins++;
+              else losses++;
+            }
+          }
+        }
+      }
+      // --- END NEW PART ---
+
+      // Don't post if nothing has changed (no LP change, no rank change, no games played)
+      if (lpChange === 0 && !rankChanged && wins === 0 && losses === 0)
+        continue;
 
       const currentRank =
         currentData.tier === "UNRANKED"
           ? "UNRANKED"
           : `${currentData.tier} ${currentData.rank}`;
-      const oldRank =
-        player.lastTier === "UNRANKED"
-          ? "UNRANKED"
-          : `${player.lastTier} ${player.lastRank}`;
+      const opggLink = `https://op.gg/summoners/sg/${encodeURIComponent(
+        player.gameName
+      )}-${player.tagLine}`;
 
       let description = `**${currentRank} - ${currentData.lp} LP**\n`;
-      if (currentRank !== oldRank) {
+      if (wins > 0 || losses > 0) {
+        description += `**Today's Record: ${wins}W - ${losses}L**\n`;
+      }
+
+      if (rankChanged) {
+        const oldRank =
+          player.lastTier === "UNRANKED"
+            ? "UNRANKED"
+            : `${player.lastTier} ${player.lastRank}`;
         description += `*Rank changed from ${oldRank}*`;
-      } else {
+      } else if (lpChange !== 0) {
         const gainOrLoss =
           lpChange > 0 ? `Gained ${lpChange}` : `Lost ${Math.abs(lpChange)}`;
         description += `**Today's Net LP:** ${
@@ -42,17 +80,15 @@ module.exports = async (client) => {
         }${lpChange} LP (${gainOrLoss})`;
       }
 
-      const opggLink = `https://op.gg/summoners/sg/${encodeURIComponent(
-        player.gameName
-      )}-${player.tagLine}`;
-      const iconURL = `http://ddragon.leagueoflegends.com/cdn/${config.LOL_VERSION}/img/profileicon/${currentData.profileIconId}.png`;
-
       const embed = new EmbedBuilder()
         .setTitle(`LP Update for ${player.gameName}#${player.tagLine}`)
         .setURL(opggLink)
-        .setThumbnail(iconURL)
         .setColor(
-          lpChange > 0 ? config.EMBED_COLORS.success : config.EMBED_COLORS.error
+          lpChange > 0
+            ? config.EMBED_COLORS.success
+            : lpChange < 0
+            ? config.EMBED_COLORS.error
+            : config.EMBED_COLORS.neutral
         )
         .setDescription(description)
         .setTimestamp();
@@ -63,7 +99,6 @@ module.exports = async (client) => {
         player.tagLine,
         "sg2",
         currentData.puuid,
-        currentData.profileIconId,
         currentData.lp,
         currentData.tier,
         currentData.rank
