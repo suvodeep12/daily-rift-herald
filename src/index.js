@@ -28,19 +28,28 @@ for (const file of commandFiles) {
 
 // --- Event: When a user uses a command ---
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({
-      content: "There was an error while executing this command!",
-      ephemeral: true,
-    });
+  // --- THIS IS THE NEW PART ---
+  if (interaction.isAutocomplete()) {
+    try {
+      await command.autocomplete(interaction);
+    } catch (error) {
+      console.error("Error handling autocomplete:", error);
+    }
+  }
+  // --- The existing command handler remains ---
+  else if (interaction.isChatInputCommand()) {
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error("Error executing command:", error);
+      await interaction.reply({
+        content: "There was an error while executing this command!",
+        ephemeral: true,
+      });
+    }
   }
 });
 

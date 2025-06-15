@@ -1,60 +1,60 @@
-const { SlashCommandBuilder } = require("discord.js");
-const db = require("../core/database.js"); // Assuming your database functions are here
+// The complete and correct content for src/commands/untrack.js
 
-// --- New Database Function ---
-// We need a way to delete a player from the database.
-// Let's add this function to our database service.
-// This is a placeholder for now, we will add the real function to database.js next.
-async function deletePlayer(gameName, tagLine, region) {
-  // This function will be implemented in database.js
-  // For now, we'll just return a placeholder value.
-  return Promise.resolve();
-}
+const { SlashCommandBuilder } = require("discord.js");
+const db = require("../core/database.js");
 
 module.exports = {
+  // --- 1. THE COMMAND DEFINITION ---
+  // We add .setAutocomplete(true) to tell Discord this option uses autocomplete.
   data: new SlashCommandBuilder()
     .setName("untrack")
-    .setDescription("Stops tracking a League of Legends player.")
+    .setDescription("Stops tracking a player by selecting them from a list.")
     .addStringOption((option) =>
       option
-        .setName("riot_id")
-        .setDescription(
-          "The Riot ID of the player to remove (e.g., PlayerName#TAG)"
-        )
+        .setName("player")
+        .setDescription("The player you want to stop tracking.")
         .setRequired(true)
-    ),
+        .setAutocomplete(true)
+    ), // <-- THIS IS THE KEY CHANGE
+
+  // --- 2. THE AUTOCOMPLETE HANDLER ---
+  // This new function runs when Discord asks for a list of choices.
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+    const players = await db.getAllTrackedPlayers();
+
+    // Create a list of choices from the database
+    const choices = players.map((player) => ({
+      name: `${player.gameName}#${player.tagLine}`, // What the user sees
+      value: String(player.id), // What the bot receives (the database ID)
+    }));
+
+    // Filter choices based on what the user is typing
+    const filtered = choices.filter((choice) =>
+      choice.name.toLowerCase().startsWith(focusedValue.toLowerCase())
+    );
+
+    await interaction.respond(filtered.slice(0, 25)); // Respond with up to 25 choices
+  },
+
+  // --- 3. THE EXECUTION LOGIC ---
+  // This now uses the database ID to delete the player.
   async execute(interaction) {
-    // Acknowledge the command immediately, visible only to the user
     await interaction.deferReply({ ephemeral: true });
 
-    const riotId = interaction.options.getString("riot_id");
-    if (!riotId.includes("#")) {
-      return interaction.editReply(
-        "Error: Invalid Riot ID format. Please use `PlayerName#TagLine`."
-      );
-    }
+    // The 'player' option now contains the database ID from the autocomplete 'value'
+    const playerIdToDelete = interaction.options.getString("player");
 
-    const [gameName, tagLine] = riotId.split("#");
-    const region = "sg2"; // The region is consistent for your bot
-
-    // Check if the player is even being tracked first
-    const existingPlayer = await db.getPlayer(gameName, tagLine, region);
-    if (!existingPlayer) {
-      return interaction.editReply(
-        `**${gameName}#${tagLine}** is not currently on the tracking list.`
-      );
-    }
-
-    // Call the database function to delete the player
-    const result = await db.deletePlayer(gameName, tagLine, region);
+    // We can add a check to make sure the ID is valid if needed, but it's generally safe
+    const result = await db.deletePlayerById(playerIdToDelete);
 
     if (result.changes > 0) {
       await interaction.editReply(
-        `Successfully removed **${gameName}#${tagLine}** from the tracking list.`
+        "Successfully removed the player from the tracking list."
       );
     } else {
       await interaction.editReply(
-        `Could not find **${gameName}#${tagLine}** in the database. No changes were made.`
+        "Could not find that player in the list. They may have already been removed."
       );
     }
   },

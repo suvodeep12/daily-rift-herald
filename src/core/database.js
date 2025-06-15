@@ -92,10 +92,17 @@ async function deletePlayer(gameName, tagLine, region) {
   );
 }
 
+// --- ADD THIS NEW FUNCTION ---
+// Function to delete a player by their unique database ID
+async function deletePlayerById(id) {
+  return db.run("DELETE FROM tracked_players WHERE id = ?", id);
+}
+
 module.exports = {
   setupDatabase,
   addOrUpdatePlayer,
   getPlayer,
   getAllTrackedPlayers,
   deletePlayer,
+  deletePlayerById,
 };
