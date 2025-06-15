@@ -1,4 +1,4 @@
-// The complete and correct content for src/core/riot-api.js
+// The complete, simplified content for src/core/riot-api.js
 const { RiotApi, LolApi } = require("twisted");
 const fetch = require("node-fetch");
 
@@ -16,7 +16,6 @@ async function getRankedData(gameName, tagLine) {
 
     const summonerData = await lolApi.Summoner.getByPUUID(puuid, "sg2");
     const summonerId = summonerData.response.id;
-    const profileIconId = summonerData.response.profileIconId;
 
     const url = `https://sg2.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
     const fetchResponse = await fetch(url, {
@@ -34,21 +33,25 @@ async function getRankedData(gameName, tagLine) {
     if (!soloQueueData) {
       return {
         success: true,
-        puuid,
-        profileIconId,
+        puuid: puuid,
         lp: 0,
         tier: "UNRANKED",
         rank: "",
+        wins: 0,
+        losses: 0,
       };
     }
 
+    // --- THIS IS THE KEY ---
+    // The API response already includes total wins and losses for the season.
     return {
       success: true,
-      puuid,
-      profileIconId,
+      puuid: puuid,
       lp: soloQueueData.leaguePoints,
       tier: soloQueueData.tier,
       rank: soloQueueData.rank,
+      wins: soloQueueData.wins, // Add this
+      losses: soloQueueData.losses, // Add this
     };
   } catch (error) {
     console.error(`Riot API Error for ${gameName}#${tagLine}:`, error.message);
@@ -56,33 +59,5 @@ async function getRankedData(gameName, tagLine) {
   }
 }
 
-async function getMatchIds(puuid) {
-  try {
-    const twentyFourHoursAgo = Math.floor(Date.now() / 1000) - 86400;
-    const options = {
-      startTime: twentyFourHoursAgo,
-      queue: 420, // 420 is the ID for Ranked Solo/Duo
-      count: 100, // Get up to 100 matches
-    };
-    const matchList = await lolApi.Match.list(puuid, "asia", options);
-    return { success: true, matches: matchList.response };
-  } catch (error) {
-    console.error(`API Error getting match list for ${puuid}:`, error.message);
-    return { success: false, error: error.message };
-  }
-}
-
-async function getMatchDetails(matchId) {
-  try {
-    const matchDetails = await lolApi.Match.get(matchId, "asia");
-    return { success: true, details: matchDetails.response };
-  } catch (error) {
-    console.error(
-      `API Error getting details for match ${matchId}:`,
-      error.message
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-module.exports = { getRankedData, getMatchIds, getMatchDetails };
+// We only need to export one function now.
+module.exports = { getRankedData };

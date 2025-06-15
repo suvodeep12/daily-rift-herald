@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const db = require("../core/database");
-const { getRankedData } = require("../core/riot-api");
+const { getRankedData } = require("../core/riot-api"); // We only need one API function now
 const config = require("../config");
 
-// Helper object to convert ranks to numerical values for sorting (no change here)
+// Helper objects for sorting (no change here)
 const rankValues = {
   IRON: 0,
   BRONZE: 400,
@@ -18,44 +18,36 @@ const rankValues = {
 };
 const divisionValues = { IV: 0, III: 100, II: 200, I: 300 };
 
-// --- NEW: A helper function to add a delay ---
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = {
-  // I will use 'lolranking' as the name based on your error log
   data: new SlashCommandBuilder()
     .setName("lolranking")
     .setDescription(
-      "Displays a live ranked leaderboard of all tracked players."
+      "Displays a live ranked leaderboard with season win/loss records."
     ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
     const trackedPlayers = await db.getAllTrackedPlayers();
-
     if (trackedPlayers.length === 0) {
-      return interaction.editReply(
-        "There are no players being tracked to create a leaderboard."
-      );
+      return interaction.editReply("There are no players to track.");
     }
 
-    // Let the user know what's happening, as this will take longer now
     await interaction.editReply(
-      `Fetching live data for ${trackedPlayers.length} players... This may take a moment.`
+      `Fetching live data for ${trackedPlayers.length} players...`
     );
 
-    // --- THIS IS THE NEW, RATE-LIMITED LOGIC ---
+    // --- THIS IS THE NEW, SIMPLIFIED LOGIC ---
     const fetchedPlayers = [];
     let successfulFetches = 0;
 
-    // 1. Process players one by one instead of all at once.
     for (const player of trackedPlayers) {
+      // The getRankedData function now returns everything we need in one call!
       const data = await getRankedData(player.gameName, player.tagLine);
 
       if (data.success) {
-        // Update the player's entry in our database with the fresh data.
-        // THIS IS THE DATABASE FIX: We pass all required parameters correctly.
         await db.addOrUpdatePlayer(
           player.gameName,
           player.tagLine,
@@ -65,15 +57,13 @@ module.exports = {
           data.tier,
           data.rank
         );
-        fetchedPlayers.push({ ...player, ...data }); // Combine DB info and live data
+        fetchedPlayers.push({ ...player, ...data });
         successfulFetches++;
       }
 
-      // 2. Add a small delay between each API call to avoid rate limits.
-      // 100 milliseconds is usually safe.
+      // We still keep the delay to be kind to the API.
       await sleep(100);
     }
-
     // --- END OF NEW LOGIC ---
 
     if (fetchedPlayers.length === 0) {
@@ -106,9 +96,17 @@ module.exports = {
       const rankString =
         p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
 
+      // Calculate winrate. Use .toFixed(1) for one decimal place.
+      const totalGames = p.wins + p.losses;
+      const winrate =
+        totalGames > 0 ? ((p.wins / totalGames) * 100).toFixed(1) : "N/A";
+
+      // --- NEW: Display Season W/L and Winrate ---
+      const winLossString = `  |  **${p.wins}W ${p.losses}L** (${winrate}%)`;
+
       description += `**${index + 1}.** ${p.gameName}#${
         p.tagLine
-      } - *${rankString} (${p.lp} LP)*\n`;
+      } - *${rankString} (${p.lp} LP)*${winLossString}\n`;
     });
     embed.setDescription(description);
 
