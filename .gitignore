@@ -1,3 +1,17 @@
-node_modules
+# Dependencies
+/node_modules
+
+# Environment Variables - VERY IMPORTANT
 .env
+
+# Database file
 database.sqlite
+database.sqlite-journal
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
