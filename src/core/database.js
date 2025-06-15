@@ -82,9 +82,20 @@ async function getAllTrackedPlayers() {
   return db.all("SELECT * FROM tracked_players");
 }
 
+// Function to delete a player by their Riot ID and region
+async function deletePlayer(gameName, tagLine, region) {
+  return db.run(
+    "DELETE FROM tracked_players WHERE gameName = ? AND tagLine = ? AND region = ?",
+    gameName,
+    tagLine,
+    region
+  );
+}
+
 module.exports = {
   setupDatabase,
   addOrUpdatePlayer,
   getPlayer,
   getAllTrackedPlayers,
+  deletePlayer,
 };
