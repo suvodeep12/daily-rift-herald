@@ -107,10 +107,11 @@ client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}!`);
   await db.setupDatabase();
 
-  cron.schedule("0 10 * * *", checkLpAndPost, {
-    timezone: "Asia/Singapore",
+  cron.schedule("0 20 * * *", checkLpAndPost, {
+    // Changed from '10' to '20' for 8 PM
+    timezone: "Asia/Kolkata",
   });
-  console.log("Cron job scheduled for SG timezone.");
+  console.log("Cron job scheduled to run daily at 8:00 PM IST (Asia/Kolkata).");
 });
 
 client.login(process.env.DISCORD_TOKEN);
