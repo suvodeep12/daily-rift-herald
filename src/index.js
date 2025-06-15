@@ -7,7 +7,7 @@ const { DISCORD_TOKEN, RIOT_API_KEY, TARGET_DISCORD_CHANNEL_ID } = process.env;
 // Step 2: Import all necessary libraries.
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const cron = require("node-cron");
-const db = require("./db");
+const db = require("./core/database");
 const { RiotApi, LolApi } = require("twisted");
 const fetch = require("node-fetch"); // <-- We need fetch for the manual call
 const express = require("express");
