@@ -1,12 +1,10 @@
-// Replace the entire function in src/tasks/dailyLpCheck.js
 const { EmbedBuilder } = require("discord.js");
 const db = require("../core/database");
-const {
-  getRankedData,
-  getMatchIds,
-  getMatchDetails,
-} = require("../core/riot-api");
+const { getRankedData } = require("../core/riot-api");
 const config = require("../config");
+
+// --- NEW: A helper function to add a delay ---
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = async (client) => {
   console.log("Running daily LP check task...");
@@ -20,59 +18,56 @@ module.exports = async (client) => {
     if (players.length === 0)
       return console.log("No players to check. Daily task finished.");
 
+    console.log(`Checking ${players.length} players...`);
+
+    // --- THIS IS THE NEW, RATE-LIMITED LOGIC ---
+    // 1. Process players one by one instead of all at once.
     for (const player of players) {
       const currentData = await getRankedData(player.gameName, player.tagLine);
-      if (!currentData.success) continue;
+      if (!currentData.success) {
+        console.log(
+          `Skipping ${player.gameName}#${player.tagLine} due to API error.`
+        );
+        await sleep(100); // Still wait even on error to be safe
+        continue; // Move to the next player
+      }
 
       const lpChange = currentData.lp - player.lastLP;
       const rankChanged =
         currentData.tier !== player.lastTier ||
         currentData.rank !== player.lastRank;
 
-      // --- NEW: Calculate Win/Loss Record ---
-      let wins = 0;
-      let losses = 0;
-      const matchHistory = await getMatchIds(currentData.puuid);
-      if (matchHistory.success && matchHistory.matches.length > 0) {
-        for (const matchId of matchHistory.matches) {
-          const matchResult = await getMatchDetails(matchId);
-          if (matchResult.success) {
-            const participant = matchResult.details.info.participants.find(
-              (p) => p.puuid === currentData.puuid
-            );
-            if (participant) {
-              if (participant.win) wins++;
-              else losses++;
-            }
-          }
-        }
-      }
-      // --- END NEW PART ---
-
-      // Don't post if nothing has changed (no LP change, no rank change, no games played)
-      if (lpChange === 0 && !rankChanged && wins === 0 && losses === 0)
+      // Don't post an update if nothing significant has changed.
+      if (lpChange === 0 && !rankChanged) {
+        // But we should still update the database with the latest check-in time.
+        await db.addOrUpdatePlayer(
+          player.gameName,
+          player.tagLine,
+          "sg2",
+          currentData.puuid,
+          currentData.lp,
+          currentData.tier,
+          currentData.rank
+        );
+        await sleep(100); // Wait before the next player
         continue;
+      }
 
+      // If we've reached here, it means something changed and we should post.
       const currentRank =
         currentData.tier === "UNRANKED"
           ? "UNRANKED"
           : `${currentData.tier} ${currentData.rank}`;
-      const opggLink = `https://op.gg/summoners/sg/${encodeURIComponent(
-        player.gameName
-      )}-${player.tagLine}`;
 
       let description = `**${currentRank} - ${currentData.lp} LP**\n`;
-      if (wins > 0 || losses > 0) {
-        description += `**Today's Record: ${wins}W - ${losses}L**\n`;
-      }
-
       if (rankChanged) {
         const oldRank =
           player.lastTier === "UNRANKED"
             ? "UNRANKED"
             : `${player.lastTier} ${player.lastRank}`;
         description += `*Rank changed from ${oldRank}*`;
-      } else if (lpChange !== 0) {
+      } else {
+        // lpChange must be non-zero if we reached this point
         const gainOrLoss =
           lpChange > 0 ? `Gained ${lpChange}` : `Lost ${Math.abs(lpChange)}`;
         description += `**Today's Net LP:** ${
@@ -82,7 +77,6 @@ module.exports = async (client) => {
 
       const embed = new EmbedBuilder()
         .setTitle(`LP Update for ${player.gameName}#${player.tagLine}`)
-        .setURL(opggLink)
         .setColor(
           lpChange > 0
             ? config.EMBED_COLORS.success
@@ -94,6 +88,8 @@ module.exports = async (client) => {
         .setTimestamp();
 
       await channel.send({ embeds: [embed] });
+
+      // Update the player's entry in our database with the fresh data.
       await db.addOrUpdatePlayer(
         player.gameName,
         player.tagLine,
@@ -103,9 +99,17 @@ module.exports = async (client) => {
         currentData.tier,
         currentData.rank
       );
+
+      // 2. Add a small delay between each player to avoid rate limits.
+      await sleep(100);
     }
+    // --- END OF NEW LOGIC ---
+
     console.log("Daily LP check task finished.");
   } catch (error) {
-    console.error("An error occurred during the daily LP check task:", error);
+    console.error(
+      "A critical error occurred during the daily LP check task:",
+      error
+    );
   }
 };

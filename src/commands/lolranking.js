@@ -1,10 +1,10 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const db = require("../core/database");
+const { getRankedData } = require("../core/riot-api");
 const config = require("../config");
 
-// This helper object converts ranks into a numerical score so we can sort players accurately.
+// Helper object to convert ranks to numerical values for sorting (no change here)
 const rankValues = {
-  // We give a base score for each tier.
   IRON: 0,
   BRONZE: 400,
   SILVER: 800,
@@ -16,64 +16,102 @@ const rankValues = {
   GRANDMASTER: 2800,
   CHALLENGER: 2800,
 };
-// We add a smaller score for each division within a tier.
 const divisionValues = { IV: 0, III: 100, II: 200, I: 300 };
 
+// --- NEW: A helper function to add a delay ---
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 module.exports = {
+  // I will use 'lolranking' as the name based on your error log
   data: new SlashCommandBuilder()
     .setName("lolranking")
-    .setDescription("Displays a ranked leaderboard of all tracked players."),
+    .setDescription(
+      "Displays a live ranked leaderboard of all tracked players."
+    ),
+
   async execute(interaction) {
-    // Acknowledge the command immediately. This gives us more time to process.
     await interaction.deferReply();
 
-    const players = await db.getAllTrackedPlayers();
+    const trackedPlayers = await db.getAllTrackedPlayers();
 
-    if (players.length === 0) {
+    if (trackedPlayers.length === 0) {
       return interaction.editReply(
-        "There are no players being tracked. Use `/track` to add someone!"
+        "There are no players being tracked to create a leaderboard."
       );
     }
 
-    // Calculate a numerical score for each player to allow for accurate sorting.
-    const playersWithScores = players.map((player) => {
-      let score = 0;
-      // Only calculate a score if the player is ranked.
-      if (player.lastTier && player.lastTier !== "UNRANKED") {
-        score =
-          (rankValues[player.lastTier] || 0) +
-          (divisionValues[player.lastRank] || 0) +
-          player.lastLP;
+    // Let the user know what's happening, as this will take longer now
+    await interaction.editReply(
+      `Fetching live data for ${trackedPlayers.length} players... This may take a moment.`
+    );
+
+    // --- THIS IS THE NEW, RATE-LIMITED LOGIC ---
+    const fetchedPlayers = [];
+    let successfulFetches = 0;
+
+    // 1. Process players one by one instead of all at once.
+    for (const player of trackedPlayers) {
+      const data = await getRankedData(player.gameName, player.tagLine);
+
+      if (data.success) {
+        // Update the player's entry in our database with the fresh data.
+        // THIS IS THE DATABASE FIX: We pass all required parameters correctly.
+        await db.addOrUpdatePlayer(
+          player.gameName,
+          player.tagLine,
+          "sg2",
+          data.puuid,
+          data.lp,
+          data.tier,
+          data.rank
+        );
+        fetchedPlayers.push({ ...player, ...data }); // Combine DB info and live data
+        successfulFetches++;
       }
-      // Return a new object that includes the original player data plus the new score.
-      return { ...player, score };
+
+      // 2. Add a small delay between each API call to avoid rate limits.
+      // 100 milliseconds is usually safe.
+      await sleep(100);
+    }
+
+    // --- END OF NEW LOGIC ---
+
+    if (fetchedPlayers.length === 0) {
+      return interaction.editReply(
+        "Could not fetch live data for any players. The Riot API might be having issues."
+      );
+    }
+
+    const playersWithScores = fetchedPlayers.map((p) => {
+      let score = 0;
+      if (p.tier && p.tier !== "UNRANKED") {
+        score =
+          (rankValues[p.tier] || 0) + (divisionValues[p.rank] || 0) + p.lp;
+      }
+      return { ...p, score };
     });
 
-    // Sort the players by their score in descending order (highest rank first).
     const sortedPlayers = playersWithScores.sort((a, b) => b.score - a.score);
 
     const embed = new EmbedBuilder()
       .setColor(config.EMBED_COLORS.info)
-      .setTitle("Server Ranked Leaderboard")
+      .setTitle("Live Server Leaderboard")
       .setTimestamp()
-      .setFooter({ text: "Daily Rift Herald" });
+      .setFooter({
+        text: `Fetched ${successfulFetches}/${trackedPlayers.length} players successfully.`,
+      });
 
-    // Build the description string by looping through the sorted players.
     let description = "";
-    sortedPlayers.forEach((player, index) => {
+    sortedPlayers.forEach((p, index) => {
       const rankString =
-        player.lastTier && player.lastTier !== "UNRANKED"
-          ? `${player.lastTier} ${player.lastRank}`
-          : "Unranked";
+        p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
 
-      // Add each player as a new line in the description.
-      description += `**${index + 1}.** ${player.gameName}#${
-        player.tagLine
-      } - *${rankString} (${player.lastLP} LP)*\n`;
+      description += `**${index + 1}.** ${p.gameName}#${
+        p.tagLine
+      } - *${rankString} (${p.lp} LP)*\n`;
     });
     embed.setDescription(description);
 
-    // Reply to the interaction with the final, complete embed.
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ content: "", embeds: [embed] });
   },
 };
