@@ -10,12 +10,12 @@ async function setupDatabase() {
     driver: sqlite3.Database,
   });
 
-  // Updated table schema
+  // The COLLATE NOCASE instruction is the fix
   await db.exec(`
         CREATE TABLE IF NOT EXISTS tracked_players (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            gameName TEXT NOT NULL,
-            tagLine TEXT NOT NULL,
+            gameName TEXT NOT NULL COLLATE NOCASE,
+            tagLine TEXT NOT NULL COLLATE NOCASE,
             region TEXT NOT NULL,
             puuid TEXT NOT NULL,
             lastLP INTEGER,
@@ -25,7 +25,7 @@ async function setupDatabase() {
             UNIQUE(gameName, tagLine, region)
         )
     `);
-  console.log("Database is ready.");
+  console.log("Database (case-insensitive) is ready.");
 }
 
 // Updated function to add or update a player
