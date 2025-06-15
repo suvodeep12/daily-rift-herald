@@ -34,13 +34,13 @@ module.exports = {
       );
     }
 
-    // --- THIS IS THE NEW ERROR HANDLING BLOCK ---
     try {
       await db.addOrUpdatePlayer(
         gameName,
         tagLine,
         region,
         initialData.puuid,
+        initialData.profileIconId,
         initialData.lp,
         initialData.tier,
         initialData.rank
@@ -49,19 +49,16 @@ module.exports = {
         `Successfully added **${gameName}#${tagLine}** to the tracking list!`
       );
     } catch (error) {
-      // Check if the error is a UNIQUE constraint violation
       if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
         await interaction.editReply(
           `**${gameName}#${tagLine}** is already on the tracking list.`
         );
       } else {
-        // For any other unexpected errors
         console.error("Error adding player to database:", error);
         await interaction.editReply(
           "An unexpected error occurred while trying to add the player to the database."
         );
       }
     }
-    // ------------------------------------------
   },
 };

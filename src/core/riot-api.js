@@ -1,3 +1,4 @@
+// The complete and correct content for src/core/riot-api.js
 const { RiotApi, LolApi } = require("twisted");
 const fetch = require("node-fetch");
 
@@ -15,6 +16,7 @@ async function getRankedData(gameName, tagLine) {
 
     const summonerData = await lolApi.Summoner.getByPUUID(puuid, "sg2");
     const summonerId = summonerData.response.id;
+    const profileIconId = summonerData.response.profileIconId;
 
     const url = `https://sg2.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
     const fetchResponse = await fetch(url, {
@@ -30,12 +32,20 @@ async function getRankedData(gameName, tagLine) {
     );
 
     if (!soloQueueData) {
-      return { success: true, puuid: puuid, lp: 0, tier: "UNRANKED", rank: "" };
+      return {
+        success: true,
+        puuid,
+        profileIconId,
+        lp: 0,
+        tier: "UNRANKED",
+        rank: "",
+      };
     }
 
     return {
       success: true,
-      puuid: puuid,
+      puuid,
+      profileIconId,
       lp: soloQueueData.leaguePoints,
       tier: soloQueueData.tier,
       rank: soloQueueData.rank,

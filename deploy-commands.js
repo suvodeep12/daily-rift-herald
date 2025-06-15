@@ -11,6 +11,7 @@ const commandFiles = fs
 
 for (const file of commandFiles) {
   const command = require(`./src/commands/${file}`);
+  console.log(`- Found command: /${command.data.name}`);
   commands.push(command.data.toJSON());
 }
 
