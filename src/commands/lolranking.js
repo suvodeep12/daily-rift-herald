@@ -82,57 +82,60 @@ module.exports = {
 
     const embed = new EmbedBuilder()
       .setColor(config.EMBED_COLORS.info)
-      .setTitle("Live Server Leaderboard")
+      .setTitle("🏆 Live Server Leaderboard")
       .setTimestamp()
-      .setFooter({
-        text: `Fetched ${successfulFetches}/${trackedPlayers.length} players successfully.`,
-      });
+      .setFooter({ text: "Daily Rift Herald" });
 
     let description = "";
     sortedPlayers.forEach((p, index) => {
-      const tierEmojiName = rankEmojiMap[p.tier];
-      const rankEmoji = tierEmojiName
+      const rankEmojiName = rankEmojiMap[p.tier];
+      const rankEmoji = rankEmojiName
         ? interaction.guild.emojis.cache.find(
-            (emoji) => emoji.name === tierEmojiName
-          )
+            (emoji) => emoji.name === rankEmojiName
+          ) || ""
         : "";
+
       const rankString =
-        p.tier && p.tier !== "UNRANKED"
-          ? `${rankEmoji} ${p.tier} ${p.rank}`
-          : "Unranked";
+        p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
+
+      const primaryLine = `**${index + 1}.** ${rankEmoji} **${p.gameName}#${
+        p.tagLine
+      }** - ${rankString} (${p.lp} LP)`;
+
+      description += primaryLine + "\n";
 
       const totalGames = p.wins + p.losses;
-      const winrate = totalGames > 0 ? (p.wins / totalGames) * 100 : 0;
+      if (totalGames > 0) {
+        const winrate = (p.wins / totalGames) * 100;
 
-      let trendEmoji;
-      if (winrate > 50) {
-        trendEmoji =
-          interaction.guild.emojis.cache.find(
-            (emoji) => emoji.name === "arrow_up"
-          ) || "🔼";
-      } else if (winrate < 50) {
-        trendEmoji =
-          interaction.guild.emojis.cache.find(
-            (emoji) => emoji.name === "small_red_triangle_down"
-          ) || "🔻";
-      } else {
-        // Exactly 50%
-        trendEmoji =
-          interaction.guild.emojis.cache.find(
-            (emoji) => emoji.name === "heavy_minus_sign"
-          ) || "➖";
+        let trendEmoji;
+        if (winrate > 50) {
+          trendEmoji =
+            interaction.guild.emojis.cache.find(
+              (emoji) => emoji.name === "arrow_up"
+            ) || "🔼";
+        } else if (winrate < 50) {
+          trendEmoji =
+            interaction.guild.emojis.cache.find(
+              (emoji) => emoji.name === "small_red_triangle_down"
+            ) || "🔻";
+        } else {
+          // Exactly 50%
+          trendEmoji =
+            interaction.guild.emojis.cache.find(
+              (emoji) => emoji.name === "heavy_minus_sign"
+            ) || "➖";
+        }
+
+        const statsLine = `> ${trendEmoji}  **W/L:** ${p.wins}W ${
+          p.losses
+        }L  •  **WR:** ${winrate.toFixed(1)}%`;
+        description += statsLine + "\n";
       }
 
-      const winLossString =
-        totalGames > 0
-          ? `  |  **${p.wins}W ${p.losses}L** ${trendEmoji} (${winrate.toFixed(
-              1
-            )}%)`
-          : ""; // Show nothing if no games played
-
-      description += `**${index + 1}.** ${p.gameName}#${
-        p.tagLine
-      } - *${rankString} (${p.lp} LP)*${winLossString}\n`;
+      if (index < sortedPlayers.length - 1) {
+        description += "\n";
+      }
     });
     embed.setDescription(description);
 
