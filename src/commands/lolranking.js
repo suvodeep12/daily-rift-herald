@@ -1,9 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const db = require("../core/database");
-const { getRankedData } = require("../core/riot-api"); // We only need one API function now
+const { getRankedData } = require("../core/riot-api");
 const config = require("../config");
 
-// Helper objects for sorting (no change here)
+// Helper objects for sorting
 const rankValues = {
   IRON: 0,
   BRONZE: 400,
@@ -39,36 +39,20 @@ module.exports = {
       `Fetching live data for ${trackedPlayers.length} players...`
     );
 
-    // --- THIS IS THE NEW, SIMPLIFIED LOGIC ---
     const fetchedPlayers = [];
     let successfulFetches = 0;
-
     for (const player of trackedPlayers) {
-      // The getRankedData function now returns everything we need in one call!
       const data = await getRankedData(player.gameName, player.tagLine);
-
       if (data.success) {
-        await db.addOrUpdatePlayer(
-          player.gameName,
-          player.tagLine,
-          "sg2",
-          data.puuid,
-          data.lp,
-          data.tier,
-          data.rank
-        );
         fetchedPlayers.push({ ...player, ...data });
         successfulFetches++;
       }
-
-      // We still keep the delay to be kind to the API.
       await sleep(100);
     }
-    // --- END OF NEW LOGIC ---
 
     if (fetchedPlayers.length === 0) {
       return interaction.editReply(
-        "Could not fetch live data for any players. The Riot API might be having issues."
+        "Could not fetch live data for any players."
       );
     }
 
@@ -96,13 +80,34 @@ module.exports = {
       const rankString =
         p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
 
-      // Calculate winrate. Use .toFixed(1) for one decimal place.
       const totalGames = p.wins + p.losses;
-      const winrate =
-        totalGames > 0 ? ((p.wins / totalGames) * 100).toFixed(1) : "N/A";
+      const winrate = totalGames > 0 ? (p.wins / totalGames) * 100 : 0;
 
-      // --- NEW: Display Season W/L and Winrate ---
-      const winLossString = `  |  **${p.wins}W ${p.losses}L** (${winrate}%)`;
+      let trendEmoji;
+      if (winrate > 50) {
+        trendEmoji =
+          interaction.guild.emojis.cache.find(
+            (emoji) => emoji.name === "arrow_up"
+          ) || "🔼";
+      } else if (winrate < 50) {
+        trendEmoji =
+          interaction.guild.emojis.cache.find(
+            (emoji) => emoji.name === "small_red_triangle_down"
+          ) || "🔻";
+      } else {
+        // Exactly 50%
+        trendEmoji =
+          interaction.guild.emojis.cache.find(
+            (emoji) => emoji.name === "heavy_minus_sign"
+          ) || "➖";
+      }
+
+      const winLossString =
+        totalGames > 0
+          ? `  |  **${p.wins}W ${p.losses}L** ${trendEmoji} (${winrate.toFixed(
+              1
+            )}%)`
+          : ""; // Show nothing if no games played
 
       description += `**${index + 1}.** ${p.gameName}#${
         p.tagLine
