@@ -18,6 +18,19 @@ const rankValues = {
 };
 const divisionValues = { IV: 0, III: 100, II: 200, I: 300 };
 
+const rankEmojiMap = {
+  IRON: "iron",
+  BRONZE: "bronze",
+  SILVER: "silver",
+  GOLD: "gold",
+  PLATINUM: "platinum",
+  EMERALD: "emerald",
+  DIAMOND: "diamond",
+  MASTER: "master",
+  GRANDMASTER: "grandmaster",
+  CHALLENGER: "challenger",
+};
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = {
@@ -77,8 +90,16 @@ module.exports = {
 
     let description = "";
     sortedPlayers.forEach((p, index) => {
+      const tierEmojiName = rankEmojiMap[p.tier];
+      const rankEmoji = tierEmojiName
+        ? interaction.guild.emojis.cache.find(
+            (emoji) => emoji.name === tierEmojiName
+          )
+        : "";
       const rankString =
-        p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
+        p.tier && p.tier !== "UNRANKED"
+          ? `${rankEmoji} ${p.tier} ${p.rank}`
+          : "Unranked";
 
       const totalGames = p.wins + p.losses;
       const winrate = totalGames > 0 ? (p.wins / totalGames) * 100 : 0;
